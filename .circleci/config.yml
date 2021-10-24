@@ -1,0 +1,48 @@
+_commons_gke: &commons_gke
+  docker_image_full: eu.gcr.io/${GCLOUD_PROJECT_ID:?}/${CIRCLE_PROJECT_REPONAME:?}:<<pipeline.number>>_${CIRCLE_SHA1::6}
+  context: [domain=nugraph_production, dockerhub]
+_commons_deploy_gke: &commons_deploy_gke
+  kubernetes_namespace: nugraph
+  gke_cluster: production-88db7a8
+  gke_compute_zone: europe-west1-b
+  # TODO: change default parameters if needed
+  # port_rest_with_auth: 8080
+  # port_grpc_with_auth: 8081
+  # port_status_no-auth: 8082
+  <<: *commons_gke
+
+workflows:
+  build_and_test:
+    jobs:
+      - runner/build_and_test:
+          filters: &filters_build_and_test
+            branches:
+              ignore: &branches_deploy
+                - main
+          context: &context_build_and_test [github_gm-machine, dockerhub]
+      - runner/lint:
+          filters: *filters_build_and_test
+          context: *context_build_and_test
+  build_and_deploy_gke:
+    jobs:
+      - runner/build_and_test:
+          filters: &filters_build_and_deploy_gke
+            branches:
+              only: *branches_deploy
+          context: *context_build_and_test
+      - runner/lint:
+          filters: *filters_build_and_deploy_gke
+          context: *context_build_and_test
+      - runner/docker_build_gke:
+          requires:
+            - runner/build_and_test
+            - runner/lint
+          <<: *commons_gke
+      - runner/deploy_gke:
+          requires:
+            - runner/docker_build_gke
+          <<: *commons_deploy_gke
+
+version: 2.1
+orbs:
+  runner: graphmasters/runner@0.3.2

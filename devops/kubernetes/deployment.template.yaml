@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: &service-name ${SERVICE_NAME_RENDERED:?} # The name of the service.
+  namespace: ${KUBERNETES_NAMESPACE:?}           # The namespace of the service.
+  labels: &labels
+    app: *service-name
+spec:
+  revisionHistoryLimit: 2            # How many previous versions can be rolled back quickly.
+  strategy:                          # How to deploy a new version.
+    type: RollingUpdate              # Deploy pods one by one.
+    rollingUpdate:
+      maxUnavailable: 0              # Never go below the desired count.
+      maxSurge: 1                    # Never go below the desired count.
+  selector:                          # Used to select what pods to be managed.
+    matchLabels: *labels
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      containers:                    # List of the containers to be deployed in a pod.
+        - name: *service-name
+          image: ${DOCKER_IMAGE_FULL:?}  # Docker image for this container.
+          command: [ "./app" ]         # Program entry point.# The main container with the service code.
+          args:                      # Program arguments.
+            - --address=:8080
+            - --readyAddress=:8081
+            - --isLocal=false
+          ports:                     # Ports to be exposed by the container.
+            - name: http
+              containerPort: 8080
+            - name: status
+              containerPort: 8081
+          resources:                 # Configuration of resource requirements.
+            limits:                  # The limit of resource usage at which to kill the container
+              cpu: 0.5              # 20% above the requested resources
+              memory: 1.5G
+          readinessProbe: # readinessProbe defines a periodical check if the service is ready to accept traffic.
+            httpGet: # It is performed via a http get.
+              path: /ready           # This is the path for the http request.
+              port: status           # This is the port on which to fire the probe.
+            initialDelaySeconds: 0   # Time to wait before sending the first probe.
+            periodSeconds: 5         # Interval of fireing the probe periodically.
